@@ -118,7 +118,19 @@ architecture arch_imp of full_radio_v1_0_S00_AXI is
 	signal reg_data_out	:std_logic_vector(C_S_AXI_DATA_WIDTH-1 downto 0);
 	signal byte_index	: integer;
 	signal aw_en	: std_logic;
-
+    signal slv_reg2_reset: std_logic ;
+    signal clk_cnt: unsigned (31 downto 0) := (others => '0');
+    signal dds_real_IF : std_logic_vector( 15 downto 0);
+    signal dds_complex_LO: std_logic_vector (31 downto 0);
+    signal LO_Tvalid, IF_Tvalid : std_logic ;
+    signal data_i, data_q: signed(31 downto 0);  
+    signal complex_sig_125: std_logic_vector (31 downto 0);
+    signal complex_sig_3125: std_logic_vector (31 downto 0);
+    signal complex_sig_48: std_logic_vector (31 downto 0);
+    signal s_axis_data_tready: std_logic ;
+    signal LP_40_data_tvalid,LP_64_data_tvalid: std_logic ;
+    signal LP_40_data_tdata,LP_64_data_tdata: std_logic_vector(47 downto 0);
+    
 COMPONENT dds_compiler_0
   PORT (
     aclk : IN STD_LOGIC;
@@ -129,6 +141,37 @@ COMPONENT dds_compiler_0
     m_axis_data_tdata : OUT STD_LOGIC_VECTOR(31 DOWNTO 0)
   );
     END COMPONENT;
+COMPONENT dds_compiler_1
+  PORT (
+    aclk : IN STD_LOGIC;
+    aresetn : IN STD_LOGIC;
+    s_axis_phase_tvalid : IN STD_LOGIC;
+    s_axis_phase_tdata : IN STD_LOGIC_VECTOR(31 DOWNTO 0);
+    m_axis_data_tvalid : OUT STD_LOGIC;
+    m_axis_data_tdata : OUT STD_LOGIC_VECTOR(15 DOWNTO 0)
+  );
+    END COMPONENT;    
+COMPONENT fir_compiler_1
+  PORT (
+    aclk : IN STD_LOGIC;
+    s_axis_data_tvalid : IN STD_LOGIC;
+    s_axis_data_tready : OUT STD_LOGIC;
+    s_axis_data_tdata : IN STD_LOGIC_VECTOR(31 DOWNTO 0);
+    m_axis_data_tvalid : OUT STD_LOGIC;
+    m_axis_data_tdata : OUT STD_LOGIC_VECTOR(47 DOWNTO 0) 
+  );
+END COMPONENT;
+
+COMPONENT fir_compiler_0
+  PORT (
+    aclk : IN STD_LOGIC;
+    s_axis_data_tvalid : IN STD_LOGIC;
+    s_axis_data_tready : OUT STD_LOGIC;
+    s_axis_data_tdata : IN STD_LOGIC_VECTOR(31 DOWNTO 0);
+    m_axis_data_tvalid : OUT STD_LOGIC;
+    m_axis_data_tdata : OUT STD_LOGIC_VECTOR(47 DOWNTO 0) 
+  );
+END COMPONENT;
 
 begin
 	-- I/O Connections assignments
@@ -371,7 +414,7 @@ begin
 	      when b"10" =>
 	        reg_data_out <= slv_reg2;
 	      when b"11" =>
-	        reg_data_out <= slv_reg3;
+	        reg_data_out <= std_logic_vector(clk_cnt);
 	      when others =>
 	        reg_data_out  <= (others => '0');
 	    end case;
@@ -398,16 +441,63 @@ begin
 
 	-- Add user logic here
 
-your_instance_name : dds_compiler_0
+fake_ADC : dds_compiler_1
   PORT MAP (
     aclk => s_axi_aclk,
-    aresetn => '1',
+    aresetn => slv_reg2_reset,
     s_axis_phase_tvalid => '1',
-    s_axis_phase_tdata => slv_reg0,
-    m_axis_data_tvalid => m_axis_tvalid,
-    m_axis_data_tdata => m_axis_tdata
+    s_axis_phase_tdata => slv_reg1,
+    m_axis_data_tvalid => IF_Tvalid,
+    m_axis_data_tdata => dds_real_IF
   );
+  
+  tuner : dds_compiler_0
+  PORT MAP (
+    aclk => s_axi_aclk,
+    aresetn => slv_reg2_reset,
+    s_axis_phase_tvalid => '1',
+    s_axis_phase_tdata => slv_reg1,
+    m_axis_data_tvalid => open,
+    m_axis_data_tdata => dds_complex_LO
+  );
+LP_40: fir_compiler_0
+  PORT MAP (
+    aclk => s_axi_aclk,
+    s_axis_data_tvalid => IF_Tvalid,
+    s_axis_data_tready => open,
+    s_axis_data_tdata => complex_sig_125,
+    m_axis_data_tvalid => LP_40_data_tvalid,
+    m_axis_data_tdata => LP_40_data_tdata
+  );
+LP_64: fir_compiler_1
+  PORT MAP (
+    aclk => s_axi_aclk,
+    s_axis_data_tvalid => LP_40_data_tvalid,
+    s_axis_data_tready => open,
+    s_axis_data_tdata => complex_sig_3125,
+    m_axis_data_tvalid => m_axis_tvalid,
+    m_axis_data_tdata => LP_64_data_tdata
+  );
+-- logic
+-- DDS reset, active low
+slv_reg2_reset <= not slv_reg2(0);
 
+-- complex mixer
+data_q <= signed(dds_real_IF) * signed(dds_complex_LO(31 downto 16));
+data_i <= signed(dds_real_if) * signed(dds_complex_LO(15 downto 0));
+
+--truncat sig
+complex_sig_125 <= std_logic_vector(data_i(29 downto 14)) & std_logic_vector(data_q(29 downto 14));
+complex_sig_3125 <= LP_40_data_tdata(39 downto 24) & LP_40_data_tdata(15 downto 0);
+m_axis_tdata <= LP_64_data_tdata(39 downto 24) & LP_64_data_tdata(15 downto 0); 
+
+--clock counter
+process(s_axi_aclk)
+begin 
+    if rising_edge (s_axi_aclk) then
+        clk_cnt <= clk_cnt + 1;
+    end if;
+end process;  
 
 	-- User logic ends
 
