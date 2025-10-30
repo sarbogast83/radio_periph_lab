@@ -444,9 +444,9 @@ begin
 fake_ADC : dds_compiler_1
   PORT MAP (
     aclk => s_axi_aclk,
-    aresetn => slv_reg2_reset,
+    aresetn => '1',
     s_axis_phase_tvalid => '1',
-    s_axis_phase_tdata => slv_reg1,
+    s_axis_phase_tdata => slv_reg0,
     m_axis_data_tvalid => IF_Tvalid,
     m_axis_data_tdata => dds_real_IF
   );
@@ -454,16 +454,16 @@ fake_ADC : dds_compiler_1
   tuner : dds_compiler_0
   PORT MAP (
     aclk => s_axi_aclk,
-    aresetn => slv_reg2_reset,
+    aresetn => '1',
     s_axis_phase_tvalid => '1',
     s_axis_phase_tdata => slv_reg1,
-    m_axis_data_tvalid => open,
+    m_axis_data_tvalid => LO_Tvalid,
     m_axis_data_tdata => dds_complex_LO
   );
 LP_40: fir_compiler_0
   PORT MAP (
     aclk => s_axi_aclk,
-    s_axis_data_tvalid => IF_Tvalid,
+    s_axis_data_tvalid => LO_Tvalid,
     s_axis_data_tready => open,
     s_axis_data_tdata => complex_sig_125,
     m_axis_data_tvalid => LP_40_data_tvalid,
@@ -475,7 +475,7 @@ LP_64: fir_compiler_1
     s_axis_data_tvalid => LP_40_data_tvalid,
     s_axis_data_tready => open,
     s_axis_data_tdata => complex_sig_3125,
-    m_axis_data_tvalid => m_axis_tvalid,
+    m_axis_data_tvalid => LP_64_data_tvalid,
     m_axis_data_tdata => LP_64_data_tdata
   );
 -- logic
@@ -489,7 +489,11 @@ data_i <= signed(dds_real_if) * signed(dds_complex_LO(15 downto 0));
 --truncat sig
 complex_sig_125 <= std_logic_vector(data_i(29 downto 14)) & std_logic_vector(data_q(29 downto 14));
 complex_sig_3125 <= LP_40_data_tdata(39 downto 24) & LP_40_data_tdata(15 downto 0);
-m_axis_tdata <= LP_64_data_tdata(39 downto 24) & LP_64_data_tdata(15 downto 0); 
+complex_sig_48 <= LP_64_data_tdata(39 downto 24) & LP_64_data_tdata(15 downto 0); 
+
+-- out
+m_axis_tdata <= complex_sig_125;
+m_axis_tvalid <= LO_Tvalid;
 
 --clock counter
 process(s_axi_aclk)
