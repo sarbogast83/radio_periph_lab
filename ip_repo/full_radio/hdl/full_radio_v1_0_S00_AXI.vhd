@@ -131,6 +131,7 @@ architecture arch_imp of full_radio_v1_0_S00_AXI is
     signal LP_40_data_tvalid,LP_64_data_tvalid: std_logic ;
     signal LP_40_data_tdata,LP_64_data_tdata: std_logic_vector(47 downto 0);
     
+    
 COMPONENT dds_compiler_0
   PORT (
     aclk : IN STD_LOGIC;
@@ -492,8 +493,8 @@ complex_sig_3125 <= LP_40_data_tdata(39 downto 24) & LP_40_data_tdata(15 downto 
 complex_sig_48 <= LP_64_data_tdata(39 downto 24) & LP_64_data_tdata(15 downto 0); 
 
 -- out
-m_axis_tdata <= complex_sig_125;
-m_axis_tvalid <= LO_Tvalid;
+m_axis_tdata <= complex_sig_48;
+m_axis_tvalid <= LP_64_data_tvalid;
 
 --clock counter
 process(s_axi_aclk)
@@ -502,6 +503,8 @@ begin
         clk_cnt <= clk_cnt + 1;
     end if;
 end process;  
+
+
 
 	-- User logic ends
 
